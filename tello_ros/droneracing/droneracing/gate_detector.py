@@ -6,10 +6,15 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
 import cv2
 import numpy as np
-from std_msgs.msg import String, Int32
+from std_msgs.msg import String, Int32, Float32
 from geometry_msgs.msg import PointStamped
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 
+RED = (0, 0, 255)
+GREEN = (0, 255, 0)
+BLUE = (255, 0, 0)
+YELLOW = (0, 255, 255)
+CLOSENESS_TRESHOLD = 0.9
 
 class GateDetector(Node):
     def __init__(self):
@@ -22,45 +27,63 @@ class GateDetector(Node):
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
             depth=10
         ))
-        self.pub = self.create_publisher(PointStamped, '/gate_position', 10)
-        self.type_pub = self.create_publisher(String, '/gate_type', 10)
         self.debug_pub = self.create_publisher(Image, '/gate_debug_image', 10)
-        self.gate_color_hsv =  [160, 61, 34]
-        self.green_lower = np.array([40, 70, 70])
-        self.green_upper = np.array([80, 255, 255])
+        self.closeness_pub = self.create_publisher(Float32, '/closeness', 10)
         self.x_error_pub = self.create_publisher(Int32, '/x_error', 10)
         self.y_error_pub = self.create_publisher(Int32, '/y_error', 10)
+        self.green_lower = np.array([40, 60, 60])
+        self.green_upper = np.array([80, 255, 255])
+        self.CONTOUR_AREA_THRESHOLD = 2000
 
 
     def image_callback(self, msg):
         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
-
         hsv = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
         mask = cv2.inRange(hsv, self.green_lower, self.green_upper)
         contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        best_contour = None
-        max_area = 0
-        gate_type = None
-        try:
-            center = [ int(np.average(indices)) for indices in np.where(mask >= 255) ]
-            print(center)
-            cv2.circle(cv_image, (center[1],center[0]), 40, (0, 0, 255), -1)
-        except (ValueError, TypeError):
-            center = None
-            pass
-        height, width, channels = cv_image.shape
-        if center:
-            x_error = width // 2 - center[1]
-            y_error = height // 2 - center[0]
-            print(f"x error: {x_error},y error: {y_error}")
-            self.x_error_pub.publish(Int32(data=x_error))
-            self.y_error_pub.publish(Int32(data=y_error))
+        # Filter small contours out of the mask
         for contour in contours:
             area = cv2.contourArea(contour)
-            cv2.drawContours(cv_image, [contour], -1, (0, 255, 255), 2)
-                # Publish debug image (with drawings)
-        debug_msg = self.bridge.cv2_to_imgmsg(cv_image, encoding='bgr8')
-        self.debug_pub.publish(debug_msg)
+            if area < self.CONTOUR_AREA_THRESHOLD:
+                cv2.drawContours(mask, [contour], -1, 0, -1) # Fill small contours with black
+                cv2.drawContours(cv_image, [contour], -1, RED, 2)
+            else:
+                cv2.drawContours(cv_image, [contour], -1, GREEN, 2)
+        # Calcualte the center of mass of the mask
+        height, width, _ = cv_image.shape
+        try:
+            center = [ int(np.average(indices)) for indices in np.where(mask >= 255) ]
+            x_error = width // 2 - center[1]
+            y_error = height // 2 - center[0]
+            cv2.circle(cv_image, (center[1], center[0]), 40, RED, -1)
+        except (ValueError, TypeError):
+            center = [-1, -1]
+            x_error = -1
+            y_error = -1
+        # Calculate closeness of the gate
+        topmost = height  # Initialize with max value
+        bottommost = 0    # Initialize with min valueop
+        for contour in contours:
+            if cv2.contourArea(contour) >= self.CONTOUR_AREA_THRESHOLD:
+                ys = contour[:, 0, 1]
+                topmost = min(topmost, np.min(ys))
+                bottommost = max(bottommost, np.max(ys))
+        top_closeness = 1.0 - (topmost / height) if topmost < height else 0.0
+        bottom_closeness = bottommost / height if bottommost > 0 else 0.0
+        cv2.line(cv_image, (0, topmost), (width, topmost), BLUE if top_closeness > CLOSENESS_TRESHOLD else RED, 4)
+        cv2.line(cv_image, (0, bottommost), (width, bottommost), BLUE if bottom_closeness > CLOSENESS_TRESHOLD else RED, 4)
+
+        closeness = min(top_closeness, bottom_closeness)
+        if center[0] != -1 and closeness > CLOSENESS_TRESHOLD:
+            cv2.circle(cv_image, (center[1],center[0]), 40, BLUE, -1)
+        
+        # Publish data
+        print(f"x center: {center[1]},\ty center: {center[0]},\tx error: {x_error},\ty error: {y_error}\tcloseness: {closeness:.2f}")
+        self.closeness_pub.publish(Float32(data=closeness))
+        self.x_error_pub.publish(Int32(data=x_error))
+        self.y_error_pub.publish(Int32(data=y_error))
+        debug_img = self.bridge.cv2_to_imgmsg(cv_image, encoding='bgr8')
+        self.debug_pub.publish(debug_img)
 """
             #cv2.putText(cv_image, gate_type, (cx + 10, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
             if area < 500:  # ignore small detections
