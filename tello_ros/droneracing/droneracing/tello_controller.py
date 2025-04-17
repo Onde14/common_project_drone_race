@@ -24,7 +24,6 @@ class TelloController(Node):
         self.closeness = 0.0
         self.client = self.create_client(TelloAction, '/tello_action')
         while not self.client.wait_for_service(timeout_sec=1.0):
-            break
             self.get_logger().info('service not available, waiting again...')
         self.state = "start"
         self.gate_state = "centering"
@@ -58,9 +57,6 @@ class TelloController(Node):
             self.state = "flying"
         # Fly trough gates
         elif self.state == "flying":
-            if self.gates_passed > self.GATES_TO_PASS:
-                self.state == "stop"
-                self.gate_state = "centering"
             if self.gate_state == "centering":
                 print("Centering")
                 print(self.closeness)
@@ -74,6 +70,9 @@ class TelloController(Node):
                     if max(abs(self.x_error), abs(self.y_error)) < 50:
                         cmd.linear.x = 0.1
                     if self.closeness > CLOSENESS_TRESHOLD:
+                        if self.gates_passed == self.GATES_TO_PASS: # Centered on stop sign!
+                            self.state = "land"
+                            self.gate_state = "done"
                         self.gate_state = "go_trough"
             # Fly straight
             elif self.gate_state == "go_trough":
@@ -85,12 +84,8 @@ class TelloController(Node):
                     self.gate_state == "centering"
                     self.gates_passed += 1
                     print(f"passed gate {self.gates_passed}/{self.GATES_TO_PASS}")
-        # Find stop sign
-        elif self.state == "stop":
-            # Find stop sign here and position correctly
-            self.state = "land"
-            self.cmd_pub.publish(cmd)
-        elif self.state == "land":
+
+        if self.state == "land":
             print("Land")
             action.cmd = "land"
             self.state = "done"
@@ -98,6 +93,7 @@ class TelloController(Node):
             pass
         if action.cmd:
             print(f"Action: {action.cmd}")
+            cmd = Twist()
             self.future = self.client.call_async(action)
             rclpy.spin_until_future_complete(self, self.future)
         self.cmd_pub.publish(cmd)
