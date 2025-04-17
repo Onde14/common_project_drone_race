@@ -50,11 +50,11 @@ class GateDetector(Node):
             pass
         height, width, channels = cv_image.shape
         if center:
-            x_error = width / 2 - center[1]
-            y_error = height / 2 - center[0]
+            x_error = width // 2 - center[1]
+            y_error = height // 2 - center[0]
             print(f"x error: {x_error},y error: {y_error}")
-            self.x_error_pub.publish(x_error)
-            self.y_error_pub.publish(y_error)
+            self.x_error_pub.publish(Int32(data=x_error))
+            self.y_error_pub.publish(Int32(data=y_error))
         for contour in contours:
             area = cv2.contourArea(contour)
             cv2.drawContours(cv_image, [contour], -1, (0, 255, 255), 2)
