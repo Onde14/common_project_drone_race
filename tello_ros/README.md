@@ -55,6 +55,16 @@ The driver sends a `rc 0 0 0 0` command after 12 seconds of silence to avoid thi
 
 ### Services
 
+ros2 pkg create droneracing --build-type ament_python --dependencies rclpy sensor_msgs std_msgs geometry_msgs cv_bridge image_transport
+
+cd ~/common_project_drone_race
+colcon build --packages-select droneracing
+source install/setup.bash
+
+colcon build --packages-select droneracing
+source install/setup.bash
+ros2 launch droneracing droneracing.launch.py
+
 * `~tello_action` tello_msgs/TelloAction
 
 ### Subscribed topics
