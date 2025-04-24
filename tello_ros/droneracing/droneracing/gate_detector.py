@@ -14,7 +14,7 @@ RED = (0, 0, 255)
 GREEN = (0, 255, 0)
 BLUE = (255, 0, 0)
 YELLOW = (0, 255, 255)
-CLOSENESS_TRESHOLD = 0.9
+CLOSENESS_TRESHOLD = 0.8
 
 class GateDetector(Node):
     def __init__(self):
@@ -31,7 +31,7 @@ class GateDetector(Node):
         self.closeness_pub = self.create_publisher(Float32, '/closeness', 10)
         self.x_error_pub = self.create_publisher(Int32, '/x_error', 10)
         self.y_error_pub = self.create_publisher(Int32, '/y_error', 10)
-        self.green_lower = np.array([40, 60, 60])
+        self.green_lower = np.array([40, 50, 40])
         self.green_upper = np.array([80, 255, 255])
         self.CONTOUR_AREA_THRESHOLD = 2000
 
