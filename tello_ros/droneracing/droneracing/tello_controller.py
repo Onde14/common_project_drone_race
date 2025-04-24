@@ -48,11 +48,32 @@ class TelloController(Node):
         self.closeness = msg.data
         self.update_time = time()
 
-    def navigate(self):
+    def tello_response(self, msg):
+        self.tello_response_msg = msg.data
+        self.update_time = time()
+
+    def send_action(self, cmd_str):
+        request = TelloAction.Request()
+        request.cmd = cmd_str
+        self.future = self.client.call_async(request)
+        self.future.add_done_callback(self.handle_action_response)
+
+    def handle_action_response(self, future):
+        try:
+            result = future.result()
+            self.get_logger().info(f"Service response: {result}")
+        except Exception as e:
+            self.get_logger().error(f"Service call failed: {e}")
+
+
+
+    async def navigate(self):
         if time() - self.update_time > 5:
+            print("time state")
             self.cmd_pub.publish(Twist())
             return
         # Takeoff
+        print("getting state")
         cmd = Twist()
         action = TelloAction.Request()
         if self.state == "start":
@@ -123,3 +144,9 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
