@@ -9,6 +9,7 @@ import numpy as np
 from std_msgs.msg import String, Int32, Float32
 from geometry_msgs.msg import PointStamped
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
+from time import time
 
 RED = (0, 0, 255)
 GREEN = (0, 255, 0)
@@ -31,67 +32,73 @@ class GateDetector(Node):
         self.closeness_pub = self.create_publisher(Float32, '/closeness', 10)
         self.x_error_pub = self.create_publisher(Int32, '/x_error', 10)
         self.y_error_pub = self.create_publisher(Int32, '/y_error', 10)
+        self.gates_passed_sub = self.create_subscription(Int32, '/gates_passed', self.gates_passed_callback, 10)
         self.green_lower = np.array([40, 50, 40])
         self.green_upper = np.array([80, 255, 255])
         self.CONTOUR_AREA_THRESHOLD = 2000
+        self.gates_passed = 0
+        self.TAG_GATE = 3
+        self.gate_detected_time = 0
 
         self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
         self.aruco_params = cv2.aruco.DetectorParameters()
         self.aruco_detector = cv2.aruco.ArucoDetector(self.aruco_dict, self.aruco_params)
 
+    def gates_passed_callback(self, msg):
+        self.gates_passed = msg.data
 
     def image_callback(self, msg):
         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
         hsv = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
-        # FIND GREEN GATE CENTER
-        mask = cv2.inRange(hsv, self.green_lower, self.green_upper)
-        contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        # Filter small contours out of the mask
-        for contour in contours:
-            area = cv2.contourArea(contour)
-            if area < self.CONTOUR_AREA_THRESHOLD:
-                cv2.drawContours(mask, [contour], -1, 0, -1) # Fill small contours with black
-                cv2.drawContours(cv_image, [contour], -1, RED, 2)
-            else:
-                cv2.drawContours(cv_image, [contour], -1, GREEN, 2)
-        # Calcualte the center of mass of the mask
-
-
         height, width, _ = cv_image.shape
-        try:
-            center = [ int(np.average(indices)) for indices in np.where(mask >= 255) ]
-            x_error = width // 2 - center[1]
-            y_error = height // 3 - center[0]
-            cv2.circle(cv_image, (center[1], center[0]), 40, RED, -1)
-            # Calculate closeness of the gate
-            topmost = height  # Initialize with max value
-            bottommost = 0    # Initialize with min valueop
-            for contour in contours:
-                if cv2.contourArea(contour) >= self.CONTOUR_AREA_THRESHOLD:
-                    ys = contour[:, 0, 1]
-                    topmost = min(topmost, np.min(ys))
-                    bottommost = max(bottommost, np.max(ys))
-            top_closeness = 1.0 - (topmost / height) if topmost < height else 0.0
-            bottom_closeness = bottommost / height if bottommost > 0 else 0.0
-            cv2.line(cv_image, (0, topmost), (width, topmost), BLUE if top_closeness > CLOSENESS_TRESHOLD else RED, 4)
-            cv2.line(cv_image, (0, bottommost), (width, bottommost), BLUE if bottom_closeness > CLOSENESS_TRESHOLD else RED, 4)
+        if self.gates_passed != self.TAG_GATE:
 
-            closeness = min(top_closeness, bottom_closeness)
-            if center[0] != -1 and closeness > CLOSENESS_TRESHOLD:
-                cv2.circle(cv_image, (center[1],center[0]), 40, BLUE, -1)
-        except (ValueError, TypeError):
-            center = [-1, -1]
-            x_error = -1
-            y_error = -1
-            closeness = 0.0
-        
-        # If green gate center was not found, try to find fiducial gate center
-        # FIND FIDUCUAL GATE CENTER
-        if center[0] == -1:
+            # FIND GREEN GATE CENTER
+            mask = cv2.inRange(hsv, self.green_lower, self.green_upper)
+            contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            # Filter small contours out of the mask
+            for contour in contours:
+                area = cv2.contourArea(contour)
+                if area < self.CONTOUR_AREA_THRESHOLD:
+                    cv2.drawContours(mask, [contour], -1, 0, -1) # Fill small contours with black
+                    cv2.drawContours(cv_image, [contour], -1, RED, 2)
+                else:
+                    cv2.drawContours(cv_image, [contour], -1, GREEN, 2)
+            # Calcualte the center of mass of the mask
+
+            try:
+                center = [ int(np.average(indices)) for indices in np.where(mask >= 255) ]
+                x_error = width // 2 - center[1]
+                y_error = height // 3 - center[0]
+                cv2.circle(cv_image, (center[1], center[0]), 40, RED, -1)
+                # Calculate closeness of the gate
+                topmost = height  # Initialize with max value
+                bottommost = 0    # Initialize with min valueop
+                for contour in contours:
+                    if cv2.contourArea(contour) >= self.CONTOUR_AREA_THRESHOLD:
+                        ys = contour[:, 0, 1]
+                        topmost = min(topmost, np.min(ys))
+                        bottommost = max(bottommost, np.max(ys))
+                top_closeness = 1.0 - (topmost / height) if topmost < height else 0.0
+                bottom_closeness = bottommost / height if bottommost > 0 else 0.0
+                cv2.line(cv_image, (0, topmost), (width, topmost), BLUE if top_closeness > CLOSENESS_TRESHOLD else RED, 4)
+                cv2.line(cv_image, (0, bottommost), (width, bottommost), BLUE if bottom_closeness > CLOSENESS_TRESHOLD else RED, 4)
+
+                closeness = min(top_closeness, bottom_closeness)
+                if center[0] != -1 and closeness > CLOSENESS_TRESHOLD:
+                    cv2.circle(cv_image, (center[1],center[0]), 40, BLUE, -1)
+            except (ValueError, TypeError):
+                center = [-1, -1]
+                x_error = -1
+                y_error = -1
+                closeness = 0.0
+        elif self.gates_passed == self.TAG_GATE:        
+            # If green gate center was not found, try to find fiducial gate center
+            # FIND FIDUCUAL GATE CENTER
             corners, ids, _ = self.aruco_detector.detectMarkers(cv_image)
             if ids is not None and len(ids) >= 3:
-                center = []
                 topmost = height
+                center = []
                 bottommost = 0
                 for marker in corners:
                     c = marker[0]
@@ -106,18 +113,28 @@ class GateDetector(Node):
                 avg_y = int(np.mean([pt[1] for pt in center]))
                 x_error = width // 2 - avg_x
                 y_error = height // 3 - avg_y
-                closeness = min(1.0 - topmost / height, bottommost / height)
+                y_error += 25
+                closeness = min(1.0 - topmost / height, bottommost / height) + 0.2
                 cv2.circle(cv_image, (avg_x, avg_y), 20, RED, 3)
-
+            else:
+                center = [-1, -1]
+                x_error = -1
+                y_error = -1
+                closeness = 0.0
+        
         # If fiducial gate center was not found, try to find stop sign center
         # FIND STOP SIGN CENTER
-        if center[0] == -1:
-            pass
+        #if center[0] == -1:
+        #    pass
         # Publish data
-        print(f"x center: {center[1]},\ty center: {center[0]},\tx error: {x_error},\ty error: {y_error}\tcloseness: {closeness:.2f}")
-        self.closeness_pub.publish(Float32(data=closeness))
-        self.x_error_pub.publish(Int32(data=x_error))
-        self.y_error_pub.publish(Int32(data=y_error))
+        if closeness > 0:
+            self.gate_detected_time = time()
+        print(f"center: {center} \tx error: {x_error},\ty error: {y_error}\tcloseness: {closeness:.2f}")
+        if time() - self.gate_detected_time > 2 or closeness > 0:
+            print("publish")
+            self.closeness_pub.publish(Float32(data=closeness))
+            self.x_error_pub.publish(Int32(data=x_error))
+            self.y_error_pub.publish(Int32(data=y_error))
         debug_img = self.bridge.cv2_to_imgmsg(cv_image, encoding='bgr8')
         self.debug_pub.publish(debug_img)
 """
