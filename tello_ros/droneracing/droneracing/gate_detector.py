@@ -35,6 +35,10 @@ class GateDetector(Node):
         self.green_upper = np.array([80, 255, 255])
         self.CONTOUR_AREA_THRESHOLD = 2000
 
+        self.aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+        self.aruco_params = cv2.aruco.DetectorParameters()
+        self.aruco_detector = cv2.aruco.ArucoDetector(self.aruco_dict, self.aruco_params)
+
 
     def image_callback(self, msg):
         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
@@ -51,11 +55,13 @@ class GateDetector(Node):
             else:
                 cv2.drawContours(cv_image, [contour], -1, GREEN, 2)
         # Calcualte the center of mass of the mask
+
+
         height, width, _ = cv_image.shape
         try:
             center = [ int(np.average(indices)) for indices in np.where(mask >= 255) ]
             x_error = width // 2 - center[1]
-            y_error = height // 2 - center[0]
+            y_error = height // 3 - center[0]
             cv2.circle(cv_image, (center[1], center[0]), 40, RED, -1)
             # Calculate closeness of the gate
             topmost = height  # Initialize with max value
@@ -82,7 +88,27 @@ class GateDetector(Node):
         # If green gate center was not found, try to find fiducial gate center
         # FIND FIDUCUAL GATE CENTER
         if center[0] == -1:
-            pass
+            corners, ids, _ = self.aruco_detector.detectMarkers(cv_image)
+            if ids is not None and len(ids) >= 3:
+                center = []
+                topmost = height
+                bottommost = 0
+                for marker in corners:
+                    c = marker[0]
+                    cx = int(np.mean(c[:, 0]))
+                    cy = int(np.mean(c[:, 1]))
+                    center.append((cx, cy))
+                    cv2.circle(cv_image, (cx, cy), 10, BLUE, -1)
+                    topmost = min(topmost, cy)
+                    bottommost = max(bottommost, cy)
+
+                avg_x = int(np.mean([pt[0] for pt in center]))
+                avg_y = int(np.mean([pt[1] for pt in center]))
+                x_error = width // 2 - avg_x
+                y_error = height // 3 - avg_y
+                closeness = min(1.0 - topmost / height, bottommost / height)
+                cv2.circle(cv_image, (avg_x, avg_y), 20, RED, 3)
+
         # If fiducial gate center was not found, try to find stop sign center
         # FIND STOP SIGN CENTER
         if center[0] == -1:

@@ -44,11 +44,32 @@ class TelloController(Node):
         self.closeness = msg.data
         self.update_time = time()
 
-    def navigate(self):
+    def tello_response(self, msg):
+        self.tello_response_msg = msg.data
+        self.update_time = time()
+
+    def send_action(self, cmd_str):
+        request = TelloAction.Request()
+        request.cmd = cmd_str
+        self.future = self.client.call_async(request)
+        self.future.add_done_callback(self.handle_action_response)
+
+    def handle_action_response(self, future):
+        try:
+            result = future.result()
+            self.get_logger().info(f"Service response: {result}")
+        except Exception as e:
+            self.get_logger().error(f"Service call failed: {e}")
+
+
+
+    async def navigate(self):
         if time() - self.update_time > 5:
+            print("time state")
             self.cmd_pub.publish(Twist())
             return
         # Takeoff
+        print("getting state")
         cmd = Twist()
         action = TelloAction.Request()
         if self.state == "start":
@@ -64,7 +85,7 @@ class TelloController(Node):
                     cmd.angular.z = 0.01 #  rotate in place
                 else:
                     # Rotate to minimize error
-                    cmd.linear.z = -0.002 * self.y_error
+                    cmd.linear.z = 0.002 * self.y_error
                     cmd.angular.z = 0.001 * self.x_error
                     # Move closer when error is small
                     if max(abs(self.x_error), abs(self.y_error)) < 50:
@@ -94,8 +115,8 @@ class TelloController(Node):
         if action.cmd:
             print(f"Action: {action.cmd}")
             cmd = Twist()
-            self.future = self.client.call_async(action)
-            rclpy.spin_until_future_complete(self, self.future)
+            self.send_action(action.cmd)
+            print("Action Complete!")
         self.cmd_pub.publish(cmd)
         self.control_state_pub.publish(String(data=self.state))
         self.gate_state_pub.publish(String(data=self.gate_state))
@@ -112,3 +133,9 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
