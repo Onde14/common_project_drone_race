@@ -35,6 +35,10 @@ class GateDetector(Node):
         self.gates_passed_sub = self.create_subscription(Int32, '/gates_passed', self.gates_passed_callback, 10)
         self.green_lower = np.array([40, 50, 40])
         self.green_upper = np.array([80, 255, 255])
+        self.red_lower1 = np.array([0, 100, 100])
+        self.red_upper1 = np.array([10, 255, 255])
+        self.red_lower2 = np.array([160, 100, 100])
+        self.red_upper2 = np.array([180, 255, 255])
         self.CONTOUR_AREA_THRESHOLD = 2000
         self.gates_passed = 0
         self.TAG_GATE = 3
@@ -121,6 +125,48 @@ class GateDetector(Node):
                 x_error = -1
                 y_error = -1
                 closeness = 0.0
+        elif self.gates_passed == 4:
+            mask_red1 = cv2.inRange(hsv, self.red_lower1, self.red_upper1)
+            mask_red2 = cv2.inRange(hsv, self.red_lower2, self.red_upper2)
+            mask2 = cv2.bitwise_or(mask_red1, mask_red2)
+            contours2, _ = cv2.findContours(mask2, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            area = cv2.contourArea(contour)
+            if area < self.CONTOUR_AREA_THRESHOLD:
+                cv2.drawContours(mask2, [contour], -1, 0, -1) # Fill small contours with black
+                cv2.drawContours(cv_image, [contour], -1, RED, 2)
+            else:
+                cv2.drawContours(cv_image, [contour], -1, GREEN, 2)
+
+
+
+            try:
+                center = [ int(np.average(indices)) for indices in np.where(mask2 >= 255) ]
+                x_error = width // 2 - center[1]
+                y_error = height // 3 - center[0]
+                cv2.circle(cv_image, (center[1], center[0]), 40, RED, -1)
+                # Calculate closeness of the gate
+                topmost = height  # Initialize with max value
+                bottommost = 0    # Initialize with min valueop
+                for contour in contours:
+                    if cv2.contourArea(contour) >= self.CONTOUR_AREA_THRESHOLD:
+                        ys = contour[:, 0, 1]
+                        topmost = min(topmost, np.min(ys))
+                        bottommost = max(bottommost, np.max(ys))
+                top_closeness = 1.0 - (topmost / height) if topmost < height else 0.0
+                bottom_closeness = bottommost / height if bottommost > 0 else 0.0
+                cv2.line(cv_image, (0, topmost), (width, topmost), BLUE if top_closeness > CLOSENESS_TRESHOLD else RED, 4)
+                cv2.line(cv_image, (0, bottommost), (width, bottommost), BLUE if bottom_closeness > CLOSENESS_TRESHOLD else RED, 4)
+
+                closeness = min(top_closeness, bottom_closeness)
+                if center[0] != -1 and closeness > CLOSENESS_TRESHOLD:
+                    cv2.circle(cv_image, (center[1],center[0]), 40, BLUE, -1)
+            except (ValueError, TypeError):
+                center = [-1, -1]
+                x_error = -1
+                y_error = -1
+                closeness = 0.0
+
+            
         
         # If fiducial gate center was not found, try to find stop sign center
         # FIND STOP SIGN CENTER

@@ -99,13 +99,16 @@ class TelloController(Node):
                     cmd.linear.z = 0.001 * self.y_error
                     cmd.angular.z = 0.0005 * self.x_error
                     # Move closer when error is small
+                    print("max: ", max(abs(self.x_error), abs(self.y_error)))
                     if max(abs(self.x_error), abs(self.y_error)) < 100:
+                        print("HELLOs")
                         cmd.linear.x = 0.15
                         if self.closeness > CLOSENESS_TRESHOLD:
                             if self.gates_passed == self.GATES_TO_PASS: # Centered on stop sign!
                                 self.state = "land"
                                 self.gate_state = "done"
-                            self.gate_state = "go_trough"
+                            else: 
+                                self.gate_state = "go_trough"
             # Fly straight
             elif self.gate_state == "go_trough":
                 if not self.fly_trough_start:
