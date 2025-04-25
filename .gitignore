@@ -2,3 +2,9 @@
 /install*
 /build*
 /log*
+/ros2_shared*
+/backup.txt
+/tello_ros/tello_description*
+/tello_ros/tello_driver*
+/tello_ros/tello_gazebo*
+/tello_ros/tello_msgs*
