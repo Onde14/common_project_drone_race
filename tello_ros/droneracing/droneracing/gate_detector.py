@@ -10,6 +10,7 @@ from std_msgs.msg import String, Int32, Float32
 from geometry_msgs.msg import PointStamped
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from time import time
+from nav_msgs.msg import Odometry
 
 RED = (0, 0, 255)
 GREEN = (0, 255, 0)
@@ -32,15 +33,16 @@ class GateDetector(Node):
         self.closeness_pub = self.create_publisher(Float32, '/closeness', 10)
         self.x_error_pub = self.create_publisher(Int32, '/x_error', 10)
         self.y_error_pub = self.create_publisher(Int32, '/y_error', 10)
+#        self.odom_sub = self.create_subscription(Odometry, '/odom', self.odom, 10)
         self.gates_passed_sub = self.create_subscription(Int32, '/gates_passed', self.gates_passed_callback, 10)
         self.green_lower = np.array([40, 50, 40])
         self.green_upper = np.array([80, 255, 255])
-        self.red_lower1 = np.array([0, 100, 100])
-        self.red_upper1 = np.array([10, 255, 255])
-        self.red_lower2 = np.array([160, 100, 100])
-        self.red_upper2 = np.array([180, 255, 255])
+        self.red_lower1 = np.array([0, 90, 80])
+        self.red_upper1 = np.array([3,255,255])
+        self.red_lower2 = np.array([160, 90, 80])
+        self.red_upper2 = np.array([173, 255,255])
         self.CONTOUR_AREA_THRESHOLD = 2000
-        self.gates_passed = 0
+        self.gates_passed = 4
         self.TAG_GATE = 3
         self.gate_detected_time = 0
 
@@ -55,8 +57,8 @@ class GateDetector(Node):
         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
         hsv = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
         height, width, _ = cv_image.shape
-        if self.gates_passed != self.TAG_GATE:
-
+        if self.gates_passed != self.TAG_GATE and self.gates_passed != 4:
+            print("Looking for green colors")
             # FIND GREEN GATE CENTER
             mask = cv2.inRange(hsv, self.green_lower, self.green_upper)
             contours, _ = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -126,16 +128,18 @@ class GateDetector(Node):
                 y_error = -1
                 closeness = 0.0
         elif self.gates_passed == 4:
+            print("Looking for red colors")
             mask_red1 = cv2.inRange(hsv, self.red_lower1, self.red_upper1)
             mask_red2 = cv2.inRange(hsv, self.red_lower2, self.red_upper2)
             mask2 = cv2.bitwise_or(mask_red1, mask_red2)
             contours2, _ = cv2.findContours(mask2, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-            area = cv2.contourArea(contour)
-            if area < self.CONTOUR_AREA_THRESHOLD:
-                cv2.drawContours(mask2, [contour], -1, 0, -1) # Fill small contours with black
-                cv2.drawContours(cv_image, [contour], -1, RED, 2)
-            else:
-                cv2.drawContours(cv_image, [contour], -1, GREEN, 2)
+            for contour in contours2:   
+                area = cv2.contourArea(contour)
+                if area < self.CONTOUR_AREA_THRESHOLD:
+                    cv2.drawContours(mask2, [contour], -1, 0, -1) # Fill small contours with black
+                    cv2.drawContours(cv_image, [contour], -1, RED, 2)
+                else:
+                    cv2.drawContours(cv_image, [contour], -1, GREEN, 2)
 
 
 
@@ -147,7 +151,7 @@ class GateDetector(Node):
                 # Calculate closeness of the gate
                 topmost = height  # Initialize with max value
                 bottommost = 0    # Initialize with min valueop
-                for contour in contours:
+                for contour in contours2:
                     if cv2.contourArea(contour) >= self.CONTOUR_AREA_THRESHOLD:
                         ys = contour[:, 0, 1]
                         topmost = min(topmost, np.min(ys))

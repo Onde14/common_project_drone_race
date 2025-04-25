@@ -19,7 +19,7 @@ class TelloController(Node):
         self.x_error_sub = self.create_subscription(Int32, '/x_error', self.x_error_callback, 10)
         self.y_error_sub = self.create_subscription(Int32, '/y_error', self.y_error_callback, 10)
         self.closeness_sub = self.create_subscription(Float32, '/closeness', self.closeness_callback, 10)
-        self.timer = self.create_timer(0.1, self.navigate)
+        self.timer = self.create_timer(0.1, self.handle_action)
         self.x_error = 0
         self.y_error = 0
         self.update_time = 0
@@ -32,12 +32,14 @@ class TelloController(Node):
         self.gate_state = "centering"
         self.fly_trough_start = 0
         self.FLY_TROUGH_TIME = 4
-        self.gates_passed = 0
+        self.gates_passed = 4
         self.GATES_TO_PASS = 4
-        self.GOUPTIME = 2
+        self.GOUPTIME = 3
         self.goupstart = 0
         self.gategoupstart = 0
         self.TAG_GATE = 3
+        self.takeoff_started = False
+        self.takeoff_time = 5
 
     def x_error_callback(self, msg):
         self.x_error = msg.data
@@ -58,30 +60,60 @@ class TelloController(Node):
     def send_action(self, cmd_str):
         request = TelloAction.Request()
         request.cmd = cmd_str
-        self.future = self.client.call_async(request)
+        self.future = self.takeoff_client.call_async(request)
         self.future.add_done_callback(self.handle_action_response)
 
     def handle_action_response(self, future):
         try:
             result = future.result()
+            self.state == "goup"
             self.get_logger().info(f"Service response: {result}")
         except Exception as e:
             self.get_logger().error(f"Service call failed: {e}")
 
+    async def handle_action(self):
+        print("Choosing action and state is ", self.state)
+        if self.state == "waiting for takeoff":
+            pass
+        else:
+            if self.state == "start":
+                self.state == self.takeoff()
+                self.sleeper()
+            elif self.state != "land":
+                self.navigate()
+            elif self.state == "land":
+                self.land()
 
 
-    async def navigate(self):
-        # Takeoff
+    def takeoff(self):
+        if self.takeoff_started == False:
+            self.state = "waiting for takeoff"
+            self.takeoff_started == True
+        print("Takeoff")
+        action = TelloAction.Request()
+        self.takeoff_start = time()
+        action.cmd = "takeoff"
+        future = self.takeoff_client.call_async(action)
+        sleep(4)
+
+    def land(self):
+        print("Land")
+        action = TelloAction.Request()
+        action.cmd = "land"
+        future = self.land_client.call_async(action)
+        sleep(4)
+        self.state = "done"
+
+    def sleeper(self):
+        sleep(4)
+        self.state = "goup"
+
+    def navigate(self):
         print("getting state")
         cmd = Twist()
         action = TelloAction.Request()
-        if self.state == "start":
-            print("Takeoff")
-            action.cmd = "takeoff"
-            future = self.takeoff_client.call_async(action)
-            sleep(4)
-            self.state = "goup"
-        elif self.state == "goup":
+
+        if self.state == "goup":
             cmd.linear.z = 0.5
             if not self.goupstart:
                 self.goupstart = time()
@@ -99,15 +131,17 @@ class TelloController(Node):
                     cmd.linear.z = 0.001 * self.y_error
                     cmd.angular.z = 0.0005 * self.x_error
                     # Move closer when error is small
+                    print("closeness: ", self.closeness)
                     print("max: ", max(abs(self.x_error), abs(self.y_error)))
                     if max(abs(self.x_error), abs(self.y_error)) < 100:
-                        print("HELLOs")
                         cmd.linear.x = 0.15
-                        if self.closeness > CLOSENESS_TRESHOLD:
-                            if self.gates_passed == self.GATES_TO_PASS: # Centered on stop sign!
-                                self.state = "land"
-                                self.gate_state = "done"
-                            else: 
+                        if self.gates_passed == self.GATES_TO_PASS: # Centered on stop sign!
+                            if self.state != "land":
+                                if self.closeness < 0.5:
+                                    self.state = "land"
+                                    self.gate_state = "done"
+                        else:
+                            if self.closeness > CLOSENESS_TRESHOLD:
                                 self.gate_state = "go_trough"
             # Fly straight
             elif self.gate_state == "go_trough":
@@ -128,13 +162,6 @@ class TelloController(Node):
                 if time() - self.gategoupstart > 3 if self.TAG_GATE == self.gates_passed else 1.5:
                     self.gategoupstart = 0
                     self.gate_state = "centering"
-
-        elif self.state == "land":
-            print("Land")
-            action.cmd = "land"
-            future = self.land_client.call_async(action)
-            sleep(4)
-            self.state = "done"
         elif self.state == "done":
             pass
         if cmd:
