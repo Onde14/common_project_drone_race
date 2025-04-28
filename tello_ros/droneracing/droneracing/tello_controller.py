@@ -19,7 +19,7 @@ class TelloController(Node):
         self.x_error_sub = self.create_subscription(Int32, '/x_error', self.x_error_callback, 10)
         self.y_error_sub = self.create_subscription(Int32, '/y_error', self.y_error_callback, 10)
         self.closeness_sub = self.create_subscription(Float32, '/closeness', self.closeness_callback, 10)
-        self.timer = self.create_timer(0.1, self.handle_action)
+        self.timer = self.create_timer(0.1, self.handle_action) 
         self.x_error = 0
         self.y_error = 0
         self.update_time = 0
@@ -103,6 +103,7 @@ class TelloController(Node):
         future = self.land_client.call_async(action)
         sleep(4)
         self.state = "done"
+        self.timer.cancel()
 
     def sleeper(self):
         sleep(4)
@@ -123,7 +124,6 @@ class TelloController(Node):
         elif self.state == "flying":
             if self.gate_state == "centering":
                 print("Centering")
-                print(self.closeness)
                 if self.x_error == -1 or self.y_error == -1: # Center not detected
                     cmd.angular.z = -0.2 #  rotate in place
                 else:
@@ -137,14 +137,17 @@ class TelloController(Node):
                         cmd.linear.x = 0.15
                         if self.gates_passed == self.GATES_TO_PASS: # Centered on stop sign!
                             if self.state != "land":
-                                if self.closeness < 0.5:
+                                if self.closeness > 0.51:
+                                    cmd.linear.x = 0.0
+                                    cmd.linear.z = 0.0
+                                    cmd.angular.z = 0.0
                                     self.state = "land"
                                     self.gate_state = "done"
                         else:
                             if self.closeness > CLOSENESS_TRESHOLD:
                                 self.gate_state = "go_trough"
             # Fly straight
-            elif self.gate_state == "go_trough":
+            elif self.gate_state == "go_trough" and self.gates_passed != self.GATES_TO_PASS:
                 if not self.fly_trough_start:
                     print("go_trough trigger")
                     self.fly_trough_start = time()

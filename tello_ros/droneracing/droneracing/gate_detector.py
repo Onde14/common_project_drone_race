@@ -37,10 +37,10 @@ class GateDetector(Node):
         self.gates_passed_sub = self.create_subscription(Int32, '/gates_passed', self.gates_passed_callback, 10)
         self.green_lower = np.array([40, 50, 40])
         self.green_upper = np.array([80, 255, 255])
-        self.red_lower1 = np.array([0, 90, 80])
-        self.red_upper1 = np.array([3,255,255])
-        self.red_lower2 = np.array([160, 90, 80])
-        self.red_upper2 = np.array([173, 255,255])
+        self.red_lower1 = np.array([0, 80,20])
+        self.red_upper1 = np.array([10,255,255])
+        self.red_lower2 = np.array([170, 80, 20])
+        self.red_upper2 = np.array([180, 255,255])
         self.CONTOUR_AREA_THRESHOLD = 2000
         self.gates_passed = 4
         self.TAG_GATE = 3
@@ -54,6 +54,11 @@ class GateDetector(Node):
         self.gates_passed = msg.data
 
     def image_callback(self, msg):
+        center = [-1, -1]
+        x_error = -1
+        y_error = -1
+        closeness = 0.0
+        arearea = 0
         cv_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
         hsv = cv2.cvtColor(cv_image, cv2.COLOR_BGR2HSV)
         height, width, _ = cv_image.shape
@@ -127,6 +132,7 @@ class GateDetector(Node):
                 x_error = -1
                 y_error = -1
                 closeness = 0.0
+
         elif self.gates_passed == 4:
             print("Looking for red colors")
             mask_red1 = cv2.inRange(hsv, self.red_lower1, self.red_upper1)
@@ -170,6 +176,7 @@ class GateDetector(Node):
                 y_error = -1
                 closeness = 0.0
 
+
             
         
         # If fiducial gate center was not found, try to find stop sign center
@@ -185,54 +192,10 @@ class GateDetector(Node):
             self.closeness_pub.publish(Float32(data=closeness))
             self.x_error_pub.publish(Int32(data=x_error))
             self.y_error_pub.publish(Int32(data=y_error))
+
+
         debug_img = self.bridge.cv2_to_imgmsg(cv_image, encoding='bgr8')
         self.debug_pub.publish(debug_img)
-"""
-            #cv2.putText(cv_image, gate_type, (cx + 10, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-            if area < 500:  # ignore small detections
-                continue
-
-            approx = cv2.approxPolyDP(contour, 0.02 * cv2.arcLength(contour, True), True)
-            if len(approx) >= 8:
-                shape = 'circle'
-            elif len(approx) == 4:
-                shape = 'rectangle'
-            else:
-                continue
-
-            if area > max_area:
-                best_contour = contour
-                max_area = area
-                gate_type = shape
-
-
-        if best_contour is not None:
-            M = cv2.moments(best_contour)
-            if M['m00'] != 0:
-                cx = int(M['m10'] / M['m00'])
-                cy = int(M['m01'] / M['m00'])
-
-                # Publish gate center as PointStamped
-                gate_msg = PointStamped()
-                gate_msg.header.stamp = self.get_clock().now().to_msg()
-                gate_msg.header.frame_id = "camera"
-                gate_msg.point.x = float(cx)
-                gate_msg.point.y = float(cy)
-                gate_msg.point.z = 0.0
-                self.pub.publish(gate_msg)
-
-                # Publish type
-                type_msg = String()
-                type_msg.data = gate_type
-
-                self.type_pub.publish(type_msg)
-
-                # Optional: draw the detected contour on the original image
-        if best_contour is not None:
-            cv2.drawContours(cv_image, [best_contour], -1, (0, 0, 255), 2)
-            cv2.circle(cv_image, (cx, cy), 5, (0, 0, 255), -1)
-            cv2.putText(cv_image, gate_type, (cx + 10, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
-"""
 
 def main(args=None):
     rclpy.init(args=args)
