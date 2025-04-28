@@ -32,7 +32,7 @@ class TelloController(Node):
         self.gate_state = "centering"
         self.fly_trough_start = 0
         self.FLY_TROUGH_TIME = 4
-        self.gates_passed = 4
+        self.gates_passed = 0
         self.GATES_TO_PASS = 4
         self.GOUPTIME = 3
         self.goupstart = 0
@@ -162,7 +162,12 @@ class TelloController(Node):
                 cmd.linear.z = 0.5
                 if not self.gategoupstart:
                     self.gategoupstart = time()
-                if time() - self.gategoupstart > 3 if self.TAG_GATE == self.gates_passed else 1.5:
+                goup_time = 1.5
+                if self.TAG_GATE == self.gates_passed:
+                    goup_time = 3
+                elif self.gates_passed == 2:
+                    goup_time = 4
+                if time() - self.gategoupstart > goup_time:
                     self.gategoupstart = 0
                     self.gate_state = "centering"
         elif self.state == "done":

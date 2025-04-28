@@ -42,7 +42,7 @@ class GateDetector(Node):
         self.red_lower2 = np.array([170, 80, 20])
         self.red_upper2 = np.array([180, 255,255])
         self.CONTOUR_AREA_THRESHOLD = 2000
-        self.gates_passed = 4
+        self.gates_passed = 0
         self.TAG_GATE = 3
         self.gate_detected_time = 0
 
@@ -166,7 +166,7 @@ class GateDetector(Node):
                 bottom_closeness = bottommost / height if bottommost > 0 else 0.0
                 cv2.line(cv_image, (0, topmost), (width, topmost), BLUE if top_closeness > CLOSENESS_TRESHOLD else RED, 4)
                 cv2.line(cv_image, (0, bottommost), (width, bottommost), BLUE if bottom_closeness > CLOSENESS_TRESHOLD else RED, 4)
-
+                closeness = abs(topmost - bottommost) / height
                 closeness = min(top_closeness, bottom_closeness)
                 if center[0] != -1 and closeness > CLOSENESS_TRESHOLD:
                     cv2.circle(cv_image, (center[1],center[0]), 40, BLUE, -1)
