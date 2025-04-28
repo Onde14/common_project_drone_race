@@ -167,7 +167,6 @@ class GateDetector(Node):
                 cv2.line(cv_image, (0, topmost), (width, topmost), BLUE if top_closeness > CLOSENESS_TRESHOLD else RED, 4)
                 cv2.line(cv_image, (0, bottommost), (width, bottommost), BLUE if bottom_closeness > CLOSENESS_TRESHOLD else RED, 4)
                 closeness = abs(topmost - bottommost) / height
-                closeness = min(top_closeness, bottom_closeness)
                 if center[0] != -1 and closeness > CLOSENESS_TRESHOLD:
                     cv2.circle(cv_image, (center[1],center[0]), 40, BLUE, -1)
             except (ValueError, TypeError):

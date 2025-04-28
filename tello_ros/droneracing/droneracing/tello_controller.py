@@ -137,7 +137,7 @@ class TelloController(Node):
                         cmd.linear.x = 0.15
                         if self.gates_passed == self.GATES_TO_PASS: # Centered on stop sign!
                             if self.state != "land":
-                                if self.closeness > 0.51:
+                                if self.closeness > 0.33:
                                     cmd.linear.x = 0.0
                                     cmd.linear.z = 0.0
                                     cmd.angular.z = 0.0
@@ -153,7 +153,10 @@ class TelloController(Node):
                     self.fly_trough_start = time()
                 cmd.linear.x = 0.3
                 cmd.linear.z = -0.2
-                if time() - self.fly_trough_start > self.FLY_TROUGH_TIME:
+                fly_throught_time = self.FLY_TROUGH_TIME
+                if self.gates_passed == self.TAG_GATE:
+                    fly_throught_time += 1.5
+                if time() - self.fly_trough_start > fly_throught_time:
                     self.gate_state = "goup"
                     self.gates_passed += 1
                     self.fly_trough_start = 0
@@ -164,7 +167,7 @@ class TelloController(Node):
                     self.gategoupstart = time()
                 goup_time = 1.5
                 if self.TAG_GATE == self.gates_passed:
-                    goup_time = 3
+                    goup_time = 2.5
                 elif self.gates_passed == 2:
                     goup_time = 4
                 if time() - self.gategoupstart > goup_time:
