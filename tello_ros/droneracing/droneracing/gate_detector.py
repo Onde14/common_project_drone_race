@@ -70,7 +70,8 @@ class GateDetector(Node):
             # Filter small contours out of the mask
             for contour in contours:
                 area = cv2.contourArea(contour)
-                if area < self.CONTOUR_AREA_THRESHOLD:
+                threshold = 5000 if self.gates_passed == 1 else self.CONTOUR_AREA_THRESHOLD
+                if area < threshold:
                     cv2.drawContours(mask, [contour], -1, 0, -1) # Fill small contours with black
                     cv2.drawContours(cv_image, [contour], -1, RED, 2)
                 else:
