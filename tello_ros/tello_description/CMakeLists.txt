@@ -11,7 +11,7 @@ find_package(ament_cmake REQUIRED)
 
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/urdf")
 
-foreach (INDEX RANGE 0 8)
+foreach (INDEX RANGE 0 30)
   if (${INDEX} EQUAL 0)
     set(SUFFIX "")
     set(TOPIC_NS "solo")
@@ -42,6 +42,31 @@ install(
   DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/urdf"
   DESTINATION share/${PROJECT_NAME}
 )
+
+
+install(
+  FILES
+    src/replace.py
+  DESTINATION
+    share/${PROJECT_NAME}/src
+)
+
+
+# at the bottom of your CMakeLists.txt
+
+# 1) copy the entire urdf/ directory into share/tello_description/urdf on install
+install(
+  DIRECTORY urdf
+  DESTINATION share/${PROJECT_NAME}
+)
+
+# 2) install your replace.py so it's runnable from the install space
+install(
+  PROGRAMS
+    src/replace.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 
 #=============
 # Run ament macros
