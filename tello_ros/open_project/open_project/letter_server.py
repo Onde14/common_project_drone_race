@@ -3,8 +3,14 @@ from typing import List, Union, Dict
 import numpy as np
 import matplotlib
 import math
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy
+from geometry_msgs.msg import Twist, Point
+from time import sleep, time
+from random import random
 
-NUM_DRONES = 20
+NUM_DRONES = 30
 
 @dataclass
 class Line:
@@ -241,13 +247,12 @@ box_font = {
         "Z": create_letter_Z(),
     }
 
-def interpolate_line(line: Line) -> List[tuple]:
+def interpolate_line(line: Line, n) -> List[tuple]:
     """Interpolate evenly spaced points along a line."""
     x0, y0 = line.start
     x1, y1 = line.end
 
     # Adjust number of points if overlap at ends
-    n = NUM_DRONES
     points = [(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t) for t in np.linspace(0, 1, n)]
     if line.overlap_start:
         points = points[1:]
@@ -255,7 +260,7 @@ def interpolate_line(line: Line) -> List[tuple]:
         points = points[:-1]
     return points
 
-def interpolate_partial_circle(arc: PartialCircle) -> List[tuple]:
+def interpolate_partial_circle(arc: PartialCircle, n) -> List[tuple]:
     """Interpolate evenly spaced points along a clockwise arc."""
     cx, cy = arc.center
     start_angle = arc.start_angle % (2 * math.pi)
@@ -271,7 +276,6 @@ def interpolate_partial_circle(arc: PartialCircle) -> List[tuple]:
 
     
     # Adjust number of points if overlap at ends
-    n = NUM_DRONES
     angles = [end_angle - angle * t for t in np.linspace(0, 1, n)]
     
     points = [(cx + arc.radius * math.sin(a), cy + arc.radius * math.cos(a)) for a in angles]
@@ -290,7 +294,7 @@ def get_character_points(char: str) -> List[tuple]:
         if isinstance(shape, (Line, PartialCircle)):
             all_lenghts.append(shape.get_length())
     total_length = sum(all_lenghts)
-    min_gap = 0.125
+    min_gap = 0.1
     point_count = min(total_length / min_gap, NUM_DRONES)
     all_points = []
     for shape, lenght in zip(shapes, all_lenghts):
@@ -301,23 +305,82 @@ def get_character_points(char: str) -> List[tuple]:
             all_points.extend(interpolate_partial_circle(shape, points_for_shape))
     return all_points
 
-def main():
-    # Main function for testing
-    import matplotlib.pyplot as plt
-    import numpy as np
+reliable_qos = QoSProfile(
+    reliability=QoSReliabilityPolicy.RELIABLE,
+    depth=10
+)
 
-    def plot_character(char):
-        points = get_character_points(char, NUM_DRONES)
-        x_vals, y_vals = zip(*points)
-        plt.figure(figsize=(2, 4))
-        plt.scatter(x_vals, y_vals, s=10)
-        plt.title(f"Character: {char}")
-        plt.gca().set_aspect('equal')
-        plt.grid(True)
-        plt.show()
+class LetterServer(Node):
+    def __init__(self):
+        super().__init__('letter_server')
+        self.target_publishers = {}
+        target_topics = [(i, f'/drone{i}/target') for i in range(1, NUM_DRONES + 1)]
+        for i, topic in target_topics:
+            self.target_publishers[i] = self.create_publisher(
+                Point,
+                topic,
+                reliable_qos
+            )
+        self.delay = (time(), 1)
+        self.timer = self.create_timer(1, self.update)
+        self.alphabet = ['A', 'B', 'C', 'D', 'E', 'F', 'G',
+                 'H', 'I', 'J', 'K', 'L', 'M', 'N',
+                 'O', 'P', 'Q', 'R', 'S', 'T', 'U',
+                 'V', 'W', 'X', 'Y', 'Z']
 
-    for c in box_font.keys():
-        plot_character(c)
+    def publish_targets(self, drone_targets):
+        for i, (x, y, z) in enumerate(drone_targets, start=1):
+            if i in self.target_publishers:
+                msg = Point()
+                msg.x = x
+                msg.y = y
+                msg.z = z
+                self.target_publishers[i].publish(msg)
+
+    def update(self):
+        if self.delay[0] and time() - self.delay[0] < self.delay[1]:
+            return
+        c = self.alphabet.pop(0)
+        self.get_logger().info(f"CHAR:{c}")
+        points = get_character_points(c)
+        # Move excess drones to reserve area
+        if len(points) < NUM_DRONES:
+            reserve_num = NUM_DRONES - len(points)
+            reserve_points = [(random() * 2 + 4, random() * 2 + 4) for _ in range(reserve_num)]
+            points.extend(reserve_points)
+
+        drone_targets = []
+        scale = 4.0
+        h_offset = 2.0
+        for point in points:
+            drone_targets.append((point[0] * scale + 1.0, 1.0, h_offset + point[1] * scale + 1.0))
+        self.publish_targets(drone_targets)
+        self.delay = (time(), 20)
+
+def main(args=None):
+    def test():
+        import matplotlib.pyplot as plt
+        import numpy as np
+        def plot_character(char):
+            points = get_character_points(char, NUM_DRONES)
+            x_vals, y_vals = zip(*points)
+            plt.figure(figsize=(2, 4))
+            plt.scatter(x_vals, y_vals, s=10)
+            plt.title(f"Character: {char}")
+            plt.gca().set_aspect('equal')
+            plt.grid(True)
+            plt.show()
+        for c in box_font.keys():
+            plot_character(c)
+    #test()
+
+    rclpy.init(args=args)
+    node = LetterServer()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+
 
 if __name__ == "__main__":
     main()

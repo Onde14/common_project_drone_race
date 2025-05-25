@@ -2,15 +2,16 @@
 import rclpy
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from rclpy.node import Node
-from geometry_msgs.msg import Twist, PoseStamped
+from geometry_msgs.msg import Twist, Point, Quaternion
 from nav_msgs.msg import Odometry
-from std_msgs.msg import String, Int32, Float32
-from time import time
+from time import time, sleep
 from tello_msgs.srv import TelloAction
-from functools import partial
 from rclpy.executors import MultiThreadedExecutor
+from traceback import print_exc
+from functools import partial
+import tf_transformations
 
-NUM_DRONES = 20
+NUM_DRONES = 30
 
 best_effort_qos = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -24,10 +25,10 @@ reliable_qos = QoSProfile(
 
 class TelloController(Node):
     def __init__(self, drone_num):
-        print(f"PÖÖÖÖÖÖÖÖÖÖÖÖÖ{drone_num}")
+        self.drone_num = drone_num
         super().__init__(f'tello_controller{drone_num}')
         self.cmd_pub = self.create_publisher(Twist, f'/drone{drone_num}/cmd_vel', reliable_qos)
-        self.target_sub = self.create_subscription(PoseStamped, f'/drone{drone_num}/target', self.target_callback, best_effort_qos)
+        self.target_sub = self.create_subscription(Point, f'/drone{drone_num}/target', self.target_callback, best_effort_qos)
 
         odom_topics = [(i, f'/drone{i}/odom') for i in range(1, NUM_DRONES+1)]
 
@@ -39,7 +40,7 @@ class TelloController(Node):
                 best_effort_qos
             )
 
-        self.timer = self.create_timer(0.2, self.navigate)
+        self.timer = self.create_timer(0.1, self.navigate)
         # Target position
         self.target = {
             "x": 0.0,
@@ -52,43 +53,80 @@ class TelloController(Node):
         while not self.client.wait_for_service():
             self.get_logger().info('service not available, waiting again...')
         self.state = "start"
+        self.delay = (None, None)
 
-    def target_callback(self, msg: PoseStamped):
-        self.target = {
-            "x": msg.pose.position.x,
-            "y": msg.pose.position.y,
-            "z": msg.pose.position.z
-        }
+    def target_callback(self, msg: Point):
+        try:
+            self.target = {
+                "x": msg.x,
+                "y": msg.y,
+                "z": msg.z
+            }
+        except:
+            print_exc()
 
-    def odom_callback(self, msg: Odometry, i):
-        self.odoms.update({str(i): {"pose": msg.pose.pose.position,
-                                    "orientation:": msg.pose.pose.orientation}})
+    def odom_callback(self, i, msg: Odometry):
+        try:
+            self.odoms.update({str(i): {"pose": msg.pose.pose.position,
+                                        "orientation": msg.pose.pose.orientation}})
+        except:
+            print_exc()
     
 
     def navigate(self):
-        # Takeoff
-        cmd = Twist()
-        action = TelloAction.Request()
-        if self.state == "start":
-            print("Takeoff")
-            action.cmd = "takeoff"
-            self.state = "flying"
-        elif self.state == "flying":
-            pass
-        if self.state == "land":
-            print("Land")
-            action.cmd = "land"
-            self.state = "done"
-        elif self.state == "done":
-            pass
-        if action.cmd:
-            print(f"Action: {action.cmd}")
+        try:
+            if self.delay[0] and time() - self.delay[0] < self.delay[1]:
+                return
+            self.delay = (None, None)
+            # Takeoff
             cmd = Twist()
-            self.future = self.client.call_async(action)
-            rclpy.spin_until_future_complete(self, self.future)
-        self.cmd_pub.publish(cmd)
-        self.control_state_pub.publish(String(data=self.state))
-        self.gate_state_pub.publish(String(data=self.gate_state))
+            action = TelloAction.Request()
+            if self.state == "start":
+                print("Takeoff")
+                action.cmd = "takeoff"
+                self.state = "flying"
+            elif self.state == "flying":
+                    #Keep drone pointing straight
+                    orientation: Quaternion = self.odoms[str(self.drone_num)]["orientation"]
+                    qx = orientation.x
+                    qy = orientation.y
+                    qz = orientation.z
+                    qw = orientation.w
+                    roll, pitch, yaw = tf_transformations.euler_from_quaternion([qx, qy, qz, qw])
+                    cmd.angular.z = max(-0.5, min(0.5, -0.1 * yaw)) # yaw control is very broken...
+                    
+                    # Only correct angle if its way off
+                    if abs(yaw) > 1:
+                        #self.get_logger().info(f"{self.drone_num} {yaw}")
+                        cmd.linear.x = 0.0
+                        cmd.linear.y = 0.0
+                        cmd.linear.z = 0.0
+                    else:
+                        pos: Point = self.odoms[str(self.drone_num)]["pose"]
+                        # If to keep drones still at the start
+                        errors = {
+                            "x": self.target["x"] - pos.x if self.target["x"] else 0.0,
+                            "y": self.target["y"] - pos.y if self.target["y"] else 0.0,
+                            "z": self.target["z"] - pos.z if self.target["z"] else 0.0,
+                        }
+                        #print("ERRORS", self.drone_num, errors)
+                        cmd.linear.x = max(-0.2, min(0.2, 0.05 * errors["x"]))
+                        cmd.linear.y = max(-0.2, min(0.2, 0.05 * errors["y"]))
+                        cmd.linear.z = max(-0.2, min(0.2, 0.05 * errors["z"]))
+            if self.state == "land":
+                print("Land")
+                action.cmd = "land"
+                self.state = "done"
+            elif self.state == "done":
+                pass
+            if action.cmd:
+                print(f"Action: {action.cmd}")
+                cmd = Twist()
+                future = self.client.call_async(action)
+                self.delay = (time(), 5)
+            self.cmd_pub.publish(cmd)
+        except:
+            print_exc()
         
 
 def main(args=None):

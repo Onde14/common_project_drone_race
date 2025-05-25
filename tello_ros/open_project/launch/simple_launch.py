@@ -10,7 +10,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    NUM_DRONES = 20
+    NUM_DRONES = 30
     GRID_SIZE = int(NUM_DRONES ** 0.5) + 1
     SPACING = 2.0
 
@@ -80,6 +80,15 @@ def generate_launch_description():
             package='open_project',
             executable='tello_controller',
             name='tello_controller',
+            output='screen'
+        )
+    )
+
+    launch_actions.append(
+        Node(
+            package='open_project',
+            executable='letter_server',
+            name='letter_server',
             output='screen'
         )
     )
