@@ -21,6 +21,8 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'letter_server = open_project.letter_server:main',
+            'tello_controller = open_project.tello_controller:main',
         ],
     },
 )

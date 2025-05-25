@@ -6,6 +6,7 @@ import subprocess
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import ExecuteProcess
+from launch_ros.actions import Node
 
 
 def generate_launch_description():
@@ -33,16 +34,16 @@ def generate_launch_description():
 
 
     for i in range(NUM_DRONES):
+        drone_num = i + 1
         row = i // GRID_SIZE
         col = i % GRID_SIZE
         x = col * SPACING
         y = row * SPACING
-        z = 1.0
-        suffix = f'_{i+1}'
-        topic_ns = f'drone{i+1}'
+        z = 0.1
+        suffix = f'_{drone_num}'
+        topic_ns = f'drone{drone_num}'
         urdf_filename = f'tello{suffix}.urdf'
         urdf_path = os.path.join(urdf_output_dir, urdf_filename)
-
 
         generate_cmd = [
             'python3',
@@ -64,7 +65,6 @@ def generate_launch_description():
             )
         )
 
-
         launch_actions.append(
             ExecuteProcess(
                 cmd=[
@@ -74,5 +74,14 @@ def generate_launch_description():
                 output='screen'
             )
         )
+
+    launch_actions.append(
+        Node(
+            package='open_project',
+            executable='tello_controller',
+            name='tello_controller',
+            output='screen'
+        )
+    )
 
     return LaunchDescription(launch_actions)

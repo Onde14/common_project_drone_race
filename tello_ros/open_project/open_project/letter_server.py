@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib
 import math
 
+NUM_DRONES = 20
+
 @dataclass
 class Line:
     start: tuple  # (x, y)
@@ -210,8 +212,7 @@ def create_letter_Z() -> BoxChar:
         Line((0, 0), (1, 0), False, False),
     ]
 
-def create_font() -> BoxFont:
-    return {
+box_font = {
         "A": create_letter_A(),
         "B": create_letter_B(),
         "C": create_letter_C(),
@@ -240,15 +241,13 @@ def create_font() -> BoxFont:
         "Z": create_letter_Z(),
     }
 
-box_font = create_font()
-
-def interpolate_line(line: Line, num_points: int) -> List[tuple]:
+def interpolate_line(line: Line) -> List[tuple]:
     """Interpolate evenly spaced points along a line."""
     x0, y0 = line.start
     x1, y1 = line.end
 
     # Adjust number of points if overlap at ends
-    n = num_points
+    n = NUM_DRONES
     points = [(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t) for t in np.linspace(0, 1, n)]
     if line.overlap_start:
         points = points[1:]
@@ -256,7 +255,7 @@ def interpolate_line(line: Line, num_points: int) -> List[tuple]:
         points = points[:-1]
     return points
 
-def interpolate_partial_circle(arc: PartialCircle, num_points: int) -> List[tuple]:
+def interpolate_partial_circle(arc: PartialCircle) -> List[tuple]:
     """Interpolate evenly spaced points along a clockwise arc."""
     cx, cy = arc.center
     start_angle = arc.start_angle % (2 * math.pi)
@@ -272,7 +271,7 @@ def interpolate_partial_circle(arc: PartialCircle, num_points: int) -> List[tupl
 
     
     # Adjust number of points if overlap at ends
-    n = num_points
+    n = NUM_DRONES
     angles = [end_angle - angle * t for t in np.linspace(0, 1, n)]
     
     points = [(cx + arc.radius * math.sin(a), cy + arc.radius * math.cos(a)) for a in angles]
@@ -283,7 +282,7 @@ def interpolate_partial_circle(arc: PartialCircle, num_points: int) -> List[tupl
         points = points[:-1]
     return points
 
-def get_character_points(char: str, points_per_char: int = 30) -> List[tuple]:
+def get_character_points(char: str) -> List[tuple]:
     """Get evenly distributed points for a character, excluding overlap points."""
     shapes = box_font.get(char.upper(), [])
     all_lenghts = []
@@ -292,7 +291,7 @@ def get_character_points(char: str, points_per_char: int = 30) -> List[tuple]:
             all_lenghts.append(shape.get_length())
     total_length = sum(all_lenghts)
     min_gap = 0.125
-    point_count = min(total_length / min_gap, points_per_char)
+    point_count = min(total_length / min_gap, NUM_DRONES)
     all_points = []
     for shape, lenght in zip(shapes, all_lenghts):
         points_for_shape = math.ceil(point_count * (lenght / total_length))
@@ -302,14 +301,13 @@ def get_character_points(char: str, points_per_char: int = 30) -> List[tuple]:
             all_points.extend(interpolate_partial_circle(shape, points_for_shape))
     return all_points
 
-
 def main():
     # Main function for testing
     import matplotlib.pyplot as plt
     import numpy as np
 
-    def plot_character(char, points_per_char=30):
-        points = get_character_points(char, points_per_char)
+    def plot_character(char):
+        points = get_character_points(char, NUM_DRONES)
         x_vals, y_vals = zip(*points)
         plt.figure(figsize=(2, 4))
         plt.scatter(x_vals, y_vals, s=10)
@@ -317,6 +315,7 @@ def main():
         plt.gca().set_aspect('equal')
         plt.grid(True)
         plt.show()
+
     for c in box_font.keys():
         plot_character(c)
 
