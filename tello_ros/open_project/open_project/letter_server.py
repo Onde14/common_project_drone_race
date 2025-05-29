@@ -346,14 +346,16 @@ class LetterServer(Node):
         # Move excess drones to reserve area
         if len(points) < NUM_DRONES:
             reserve_num = NUM_DRONES - len(points)
-            reserve_points = [(random() * 2 + 4, random() * 2 + 4) for _ in range(reserve_num)]
+            #reserve_points = [(random() * 2 + 4, random() * 2 + 4) for _ in range(reserve_num)]
+            reserve_points = [(999, 0) for _ in range(reserve_num)]
             points.extend(reserve_points)
 
         drone_targets = []
         scale = 4.0
         h_offset = 2.0
         for point in points:
-            drone_targets.append((point[0] * scale + 1.0, 1.0, h_offset + point[1] * scale + 1.0))
+            if point[0] != 999:
+                drone_targets.append((point[0] * scale + 1.0, 1.0, h_offset + point[1] * scale + 1.0))
         self.publish_targets(drone_targets)
         self.delay = (time(), 20)
 

@@ -47,7 +47,6 @@ class TelloController(Node):
     def navigate(self):
         if time() - self.update_time > 5:
             self.cmd_pub.publish(Twist())
-            return
         # Takeoff
         cmd = Twist()
         action = TelloAction.Request()

@@ -47,6 +47,11 @@ class TelloController(Node):
             "y": 0.0,
             "z": 0.0
         }
+        self.starting = {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0
+        }
         self.odoms = {}
 
         self.client = self.create_client(TelloAction, f'/drone{drone_num}/tello_action')
@@ -54,6 +59,7 @@ class TelloController(Node):
             self.get_logger().info('service not available, waiting again...')
         self.state = "start"
         self.delay = (None, None)
+        self.hasStartingPositions = 0
 
     def target_callback(self, msg: Point):
         try:
@@ -62,6 +68,12 @@ class TelloController(Node):
                 "y": msg.y,
                 "z": msg.z
             }
+            if self.target["x"] == 999 and self.target["z"] == 999:
+                self.target = {
+                    "x": self.starting["x"],
+                    "y": self.starting["y"],
+                    "z": self.starting["z"]
+                }
         except:
             print_exc()
 
@@ -103,6 +115,13 @@ class TelloController(Node):
                         cmd.linear.z = 0.0
                     else:
                         pos: Point = self.odoms[str(self.drone_num)]["pose"]
+                        if (self.hasStartingPositions == 0):
+                            self.starting = {
+                                "x": pos.x,
+                                "y": pos.y,
+                                "z": 0.0
+                            }
+                            self.hasStartingPositions == 1
                         # If to keep drones still at the start
                         errors = {
                             "x": self.target["x"] - pos.x if self.target["x"] else 0.0,
@@ -131,6 +150,7 @@ class TelloController(Node):
 
 def main(args=None):
     rclpy.init(args=args)
+    print("GGIIKKL")
     nodes = [TelloController(i) for i in range(1, NUM_DRONES+1)]
     executor = MultiThreadedExecutor()
     for node in nodes:
