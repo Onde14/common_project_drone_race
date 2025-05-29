@@ -6,7 +6,6 @@ from geometry_msgs.msg import Twist, Point, Quaternion
 from nav_msgs.msg import Odometry
 from time import time, sleep
 from tello_msgs.srv import TelloAction
-from rclpy.executors import MultiThreadedExecutor
 from traceback import print_exc
 from functools import partial
 import tf_transformations
@@ -25,8 +24,9 @@ reliable_qos = QoSProfile(
 
 class TelloController(Node):
     def __init__(self, drone_num):
-        self.drone_num = drone_num
         super().__init__(f'tello_controller{drone_num}')
+        self.drone_num = drone_num
+        self.get_logger().info(f"Started node tello_controller{drone_num}")
         self.cmd_pub = self.create_publisher(Twist, f'/drone{drone_num}/cmd_vel', reliable_qos)
         self.target_sub = self.create_subscription(Point, f'/drone{drone_num}/target', self.target_callback, best_effort_qos)
 
@@ -99,29 +99,23 @@ class TelloController(Node):
                     cmd.angular.z = max(-0.5, min(0.5, -0.1 * yaw)) # yaw control is very broken...
                     
                     # Only correct angle if its way off
-                    if abs(yaw) > 1:
-                        #self.get_logger().info(f"{self.drone_num} {yaw}")
-                        cmd.linear.x = 0.0
-                        cmd.linear.y = 0.0
-                        cmd.linear.z = 0.0
-                    else:
-                        pos: Point = self.odoms[str(self.drone_num)]["pose"]
-                        if self.home_position is None:
-                            self.home_position = {
-                                "x": pos.x,
-                                "y": pos.y,
-                                "z": pos.z
-                            }
-                        # If to keep drones still at the start
-                        errors = {
-                            "x": self.target["x"] - pos.x if self.target["x"] else 0.0,
-                            "y": self.target["y"] - pos.y if self.target["y"] else 0.0,
-                            "z": self.target["z"] - pos.z if self.target["z"] else 0.0,
+                    pos: Point = self.odoms[str(self.drone_num)]["pose"]
+                    if self.home_position is None:
+                        self.home_position = {
+                            "x": pos.x,
+                            "y": pos.y,
+                            "z": pos.z
                         }
-                        #print("ERRORS", self.drone_num, errors)
-                        cmd.linear.x = max(-0.2, min(0.2, 0.05 * errors["x"]))
-                        cmd.linear.y = max(-0.2, min(0.2, 0.05 * errors["y"]))
-                        cmd.linear.z = max(-0.2, min(0.2, 0.05 * errors["z"]))
+                    # If to keep drones still at the start
+                    errors = {
+                        "x": self.target["x"] - pos.x if self.target["x"] else 0.0,
+                        "y": self.target["y"] - pos.y if self.target["y"] else 0.0,
+                        "z": self.target["z"] - pos.z if self.target["z"] else 0.0,
+                    }
+                    #print("ERRORS", self.drone_num, errors)
+                    cmd.linear.x = max(-0.2, min(0.2, 0.05 * errors["x"]))
+                    cmd.linear.y = max(-0.2, min(0.2, 0.05 * errors["y"]))
+                    cmd.linear.z = max(-0.2, min(0.2, 0.05 * errors["z"]))
             if self.state == "land":
                 print("Land")
                 action.cmd = "land"
@@ -140,16 +134,16 @@ class TelloController(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    nodes = [TelloController(i) for i in range(1, NUM_DRONES+1)]
-    executor = MultiThreadedExecutor()
-    for node in nodes:
-        executor.add_node(node)
-    try:
-        executor.spin()
-    finally:
-        for node in nodes:
-            node.destroy_node()
-        rclpy.shutdown()
+
+    # Get drone_num from ROS params
+    node = rclpy.create_node('param_reader')
+    drone_num = node.declare_parameter('drone_num', 1).get_parameter_value().integer_value
+    node.destroy_node()
+
+    controller = TelloController(drone_num)
+    rclpy.spin(controller)
+    controller.destroy_node()
+    rclpy.shutdown()
 
 
 if __name__ == "__main__":

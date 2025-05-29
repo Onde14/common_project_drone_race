@@ -12,3 +12,5 @@ To spawn N drones add:
 ```
 
 add `CYCLONEDDS_URI="file://$HOME/CycloneDDS/my-config.xml"` to `~/.bashrc`
+
+Publish the target character to `/char`: `ros2 topic pub /char std_msgs/msg/String "{data: 'X'}"`

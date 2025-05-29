@@ -6,7 +6,8 @@ import math
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
-from geometry_msgs.msg import Twist, Point
+from geometry_msgs.msg import Point
+from std_msgs.msg import String
 from time import sleep, time
 from random import random
 
@@ -321,9 +322,8 @@ class LetterServer(Node):
                 topic,
                 reliable_qos
             )
-        self.delay = (time(), 1)
-        self.timer = self.create_timer(1, self.update)
-        self.alphabet = [char for char in box_font.keys()]
+        self.char = ''
+        self.char_sub = self.create_subscription(String, f'/char', self.char_callback, 10)
 
     def publish_targets(self, drone_targets):
         for i, (x, y, z) in enumerate(drone_targets, start=1):
@@ -334,12 +334,10 @@ class LetterServer(Node):
                 msg.z = z
                 self.target_publishers[i].publish(msg)
 
-    def update(self):
-        if self.delay[0] and time() - self.delay[0] < self.delay[1]:
-            return
-        c = self.alphabet.pop(0)
-        self.get_logger().info(f"CHAR:{c}")
-        points = get_character_points(c)
+    def char_callback(self, msg:String):
+        self.char = msg.data[0]
+        self.get_logger().info(f"CHAR:{self.char}")
+        points = get_character_points(self.char)
         drone_targets = []
         scale = 4.0
         h_offset = 2.0
@@ -349,8 +347,6 @@ class LetterServer(Node):
         if len(points) < NUM_DRONES:
             drone_targets.extend([(0.0, 0.0, -1.0) for _ in range(NUM_DRONES - len(points))]) # -1.0 is magic number to tell drone to go home
         self.publish_targets(drone_targets)
-        print(drone_targets)
-        self.delay = (time(), 20)
 
 def main(args=None):
     def test():

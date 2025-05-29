@@ -75,14 +75,15 @@ def generate_launch_description():
             )
         )
 
-    launch_actions.append(
-        Node(
-            package='open_project',
-            executable='tello_controller',
-            name='tello_controller',
-            output='screen'
+        launch_actions.append(
+            Node(
+                package='open_project',
+                executable='tello_controller',
+                name=f'tello_controller{drone_num}',
+                output='screen',
+                parameters=[{"drone_num": drone_num}]
+            )
         )
-    )
 
     launch_actions.append(
         Node(
