@@ -9,6 +9,8 @@ from tello_msgs.srv import TelloAction
 from traceback import print_exc
 from functools import partial
 import tf_transformations
+import math
+
 
 NUM_DRONES = 30
 
@@ -75,7 +77,20 @@ class TelloController(Node):
         except:
             print_exc()
     
-
+    def calc_repelling(self):
+        x_repel = 0.0
+        y_repel = 0.0
+        z_repel = 0.0
+        og: Point = self.odoms[str(self.drone_num)]["pose"]
+        for i in range(1, NUM_DRONES+1):
+            if self.drone_num != i:
+                comp: Point = self.odoms[str(i)]["pose"]
+                if math.sqrt((og.x-comp.x)**2 + (og.y-comp.y)**2 + (og.z-comp.z)**2) < 0.4: #<--minimum allowed distance
+                        x_repel += og.x - comp.x
+                        y_repel += og.y - comp.y
+                        z_repel += og.z - comp.z
+        return x_repel, y_repel, z_repel
+    
     def navigate(self):
         try:
             if self.delay[0] and time() - self.delay[0] < self.delay[1]:
@@ -106,16 +121,16 @@ class TelloController(Node):
                             "y": pos.y,
                             "z": pos.z
                         }
-                    # If to keep drones still at the start
+
                     errors = {
                         "x": self.target["x"] - pos.x if self.target["x"] else 0.0,
                         "y": self.target["y"] - pos.y if self.target["y"] else 0.0,
                         "z": self.target["z"] - pos.z if self.target["z"] else 0.0,
                     }
-                    #print("ERRORS", self.drone_num, errors)
-                    cmd.linear.x = max(-0.2, min(0.2, 0.05 * errors["x"]))
-                    cmd.linear.y = max(-0.2, min(0.2, 0.05 * errors["y"]))
-                    cmd.linear.z = max(-0.2, min(0.2, 0.05 * errors["z"]))
+                    x_repel, y_repel, z_repel = self.calc_repelling()
+                    cmd.linear.x = min(0.2, 0.05 * errors["x"]) if x_repel == 0.0 else 0.05 * x_repel
+                    cmd.linear.y = min(0.2, 0.05 * errors["y"]) if y_repel == 0.0 else 0.5 * y_repel # drones should flank from y-axis
+                    cmd.linear.z = min(0.2, 0.05 * errors["z"]) if z_repel == 0.0 else 0.05 * z_repel
             if self.state == "land":
                 print("Land")
                 action.cmd = "land"
