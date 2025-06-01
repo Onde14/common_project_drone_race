@@ -3,6 +3,7 @@ import rclpy
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, Point, Quaternion
+from std_msgs.msg import String
 from nav_msgs.msg import Odometry
 from time import time, sleep
 from tello_msgs.srv import TelloAction
@@ -12,7 +13,7 @@ import tf_transformations
 import math
 
 
-NUM_DRONES = 30
+NUM_DRONES = 15
 
 best_effort_qos = QoSProfile(
     reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -31,6 +32,9 @@ class TelloController(Node):
         self.get_logger().info(f"Started node tello_controller{drone_num}")
         self.cmd_pub = self.create_publisher(Twist, f'/drone{drone_num}/cmd_vel', reliable_qos)
         self.target_sub = self.create_subscription(Point, f'/drone{drone_num}/target', self.target_callback, best_effort_qos)
+        self.position_status = "No target"
+        self.pos_status_pub = self.create_publisher(String, f'/drone{drone_num}/status', reliable_qos)
+
 
         odom_topics = [(i, f'/drone{i}/odom') for i in range(1, NUM_DRONES+1)]
 
@@ -98,6 +102,7 @@ class TelloController(Node):
             self.delay = (None, None)
             # Takeoff
             cmd = Twist()
+            status_msg = String()
             action = TelloAction.Request()
             if self.state == "start":
                 print("Takeoff")
@@ -131,6 +136,13 @@ class TelloController(Node):
                     cmd.linear.x = min(0.2, 0.05 * errors["x"]) if x_repel == 0.0 else 0.05 * x_repel
                     cmd.linear.y = min(0.2, 0.05 * errors["y"]) if y_repel == 0.0 else 0.5 * y_repel # drones should flank from y-axis
                     cmd.linear.z = min(0.2, 0.05 * errors["z"]) if z_repel == 0.0 else 0.05 * z_repel
+                    #print("ERRORSPOS DRONE ", self.drone_num, ": ", errors["x"], " ", errors["y"], " ", errors["z"])
+                    if abs(errors["x"]) < 0.1 and abs(errors["y"]) < 0.1 and abs(errors["z"]) < 0.1:
+                        self.position_status = "Ready"
+                    else:
+                        self.position_status = "Moving"
+                    status_msg.data = self.position_status
+                    self.pos_status_pub.publish(status_msg)
             if self.state == "land":
                 print("Land")
                 action.cmd = "land"

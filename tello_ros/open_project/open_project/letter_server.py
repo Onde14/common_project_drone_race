@@ -8,10 +8,17 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy
 from geometry_msgs.msg import Point
 from std_msgs.msg import String
+from functools import partial
+from traceback import print_exc
 from time import sleep, time
 from random import random
 
-NUM_DRONES = 30
+NUM_DRONES = 15
+
+best_effort_qos = QoSProfile(
+    reliability=QoSReliabilityPolicy.BEST_EFFORT,
+    depth=10
+)
 
 @dataclass
 class Line:
@@ -322,8 +329,31 @@ class LetterServer(Node):
                 topic,
                 reliable_qos
             )
+        self.string = ''
         self.char = ''
+        self.char_num = 0
+        self.string_length = 0
+        self.delay_compensation = 0
         self.char_sub = self.create_subscription(String, f'/char', self.char_callback, 10)
+
+        status_topics = [(i, f'/drone{i}/status') for i in range(1, NUM_DRONES+1)]
+
+        for i, topic in status_topics:
+            self.create_subscription(
+                String,
+                topic,
+                partial(self.drone_status_callback, i),
+                best_effort_qos
+            )
+        
+        self.all_drone_statuses = {}
+
+
+    def drone_status_callback(self, i, msg: String):
+        try:
+            self.all_drone_statuses.update({str(i): {"status": msg.data}})
+        except:
+            print_exc()
 
     def publish_targets(self, drone_targets):
         for i, (x, y, z) in enumerate(drone_targets, start=1):
@@ -333,20 +363,46 @@ class LetterServer(Node):
                 msg.y = y
                 msg.z = z
                 self.target_publishers[i].publish(msg)
+        
+    def check_statuses(self):
+        #print("STATUSLIST: ", self.all_drone_statuses)
+        ready_amount = 0
+        for i in range(1, NUM_DRONES+1):
+            if self.all_drone_statuses[str(i)]["status"] == "Ready":
+                ready_amount += 1
+        if ready_amount == NUM_DRONES:
+            return True
+        else:
+            return False
 
     def char_callback(self, msg:String):
-        self.char = msg.data[0]
-        self.get_logger().info(f"CHAR:{self.char}")
-        points = get_character_points(self.char)
-        drone_targets = []
-        scale = 4.0
-        h_offset = 2.0
-        for point in points:
-            drone_targets.append((point[0] * scale + 1.0, 1.0, h_offset + point[1] * scale + 1.0))
-        # Move excess drones to reserve area
-        if len(points) < NUM_DRONES:
-            drone_targets.extend([(0.0, 0.0, -1.0) for _ in range(NUM_DRONES - len(points))]) # -1.0 is magic number to tell drone to go home
-        self.publish_targets(drone_targets)
+        if self.string != msg.data: 
+            self.char_num = 0
+        self.string = msg.data
+        self.string_length = len(msg.data)
+        if self.char_num < self.string_length:
+            self.char = msg.data[self.char_num]
+            self.get_logger().info(f"CHAR:{self.char}")
+            points = get_character_points(self.char)
+            drone_targets = []
+            scale = 4.0
+            h_offset = 2.0
+            for point in points:
+                drone_targets.append((point[0] * scale + 1.0, 1.0, h_offset + point[1] * scale + 1.0))
+            # Move excess drones to reserve area
+            if len(points) < NUM_DRONES:
+                drone_targets.extend([(0.0, 0.0, -1.0) for _ in range(NUM_DRONES - len(points))]) # -1.0 is magic number to tell drone to go home
+            self.publish_targets(drone_targets)
+            if self.check_statuses() == True:
+                self.delay_compensation += 1 # so that character isn't skipped
+                if self.delay_compensation == 5:
+                    self.char_num += 1
+            else:
+                self.delay_compensation = 0
+
+        else:
+            self.get_logger().info("DONE")
+
 
 def main(args=None):
     def test():

@@ -10,7 +10,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    NUM_DRONES = 30
+    NUM_DRONES = 15
     GRID_SIZE = int(NUM_DRONES ** 0.5) + 1
     SPACING = 2.0
 
