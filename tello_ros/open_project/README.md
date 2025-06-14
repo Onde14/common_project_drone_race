@@ -36,7 +36,7 @@ ros2 launch open_project simple_launch.py
 ```
 
 
-### Giving drones letter commands
+## Giving drones letter commands
 
 Wait till all the drones have took off the ground.
 
@@ -46,7 +46,7 @@ Alternatively publish the target character to `/char`: `ros2 topic pub /char std
 
 or word `ros2 topic pub /char std_msgs/msg/String "{data: 'Fly'}"`
 
-### Fixes for problems
+## Fixes for problems
 If you run into the No namespace found error re-set GAZEBO_MODEL_PATH:
 ```
 export GAZEBO_MODEL_PATH=${PWD}/install/tello_gazebo/share/tello_gazebo/models
@@ -71,6 +71,24 @@ To spawn N drones add:
 add `CYCLONEDDS_URI="file://$HOME/CycloneDDS/my-config.xml"` to `~/.bashrc`
 
 # Design
+
+Project consist of launcher file called simple_launch.py and three script files called letter_publisher.py, letter_server.py and tello_controller.py
+
+## Simple_launch
+
+Simple_launch calls other scripts in order to start and generate the gazebo world, drones in it and nodes related to them. 
+
+## Letter_publisher
+
+Letter_publisher takes inputted text from the user and publishes every character of the text one by one to the char topic.
+
+## Letter_server
+
+Letter_server holds LetterServer node class and classes Line and PartialCircle and methods for drawing and measuring positions for drones to take. The LetterServer class creates individual target topics for every drone to subscribe to, listens for incoming character request in char topic, calls get_character_points method to draw the points of the requested letter and publishes the individual target positions of every drone in the gazebo world.
+
+## Tello_controller
+
+Tello_controller holds the TelloController node class that listens for incoming target position publishes in the drone's target topic and navigates the drone in the navigate method to that target position. It does this by taking into consideration the drone's current x, y, z position, comparing them to the drone's target position x, y, z and calculating these positions difference as error which then can used to command the drone to move in right direction in these axis. 
 
 # Findings
 
