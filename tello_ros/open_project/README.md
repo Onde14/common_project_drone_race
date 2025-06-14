@@ -48,7 +48,7 @@ or word `ros2 topic pub /char std_msgs/msg/String "{data: 'Fly'}"`
 
 ## Changing amount of drones
 
-If you want to change the amount of drones spawned you have change `NUM_DRONES` value in simple_launch.py, letter_server.py and tello_controller.py
+If you want to change the amount of drones spawned you have change `NUM_DRONES` value in simple_launch.py, letter_server.py and tello_controller.py.
 
 ## Fixes for problems
 If you run into the No namespace found error re-set GAZEBO_MODEL_PATH:
@@ -101,3 +101,7 @@ We initially ran into some issues with spawning enough drones required to implem
 # Future extensions
 
 Future extensions could be implementing the system on actual drones, like a droneshow. Localization of the drones would probably require some more work.
+
+# AI usage
+
+ChatGPT was used to generate code for letter_server.py and letter_publisher.py.
