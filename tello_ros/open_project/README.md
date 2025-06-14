@@ -92,4 +92,8 @@ Tello_controller holds the TelloController node class that listens for incoming 
 
 # Findings
 
+We initially ran into some issues with spawning enought drones required to implement the system, solutions to the issues are described above. Once we could manage to spawn enough drones, the system turned out quite stable.
 
+# Future etensions
+
+Future extensions could be iplementing the system on actual drones, like a droneshow. Localization of the drones would probably require some more work.
